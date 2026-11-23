@@ -1,0 +1,14 @@
+# Raw and processed data are large and re-creatable: run scripts/download_data.py
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Model artifacts (added on training day)
+models/*.pt

@@ -1,0 +1,16 @@
+# Conda environment for the project.
+# Create with:  conda env create -f environment.yml   then: conda activate stormtrack
+name: stormtrack
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pandas
+  - numpy
+  - matplotlib
+  - jupyter
+  - ipykernel
+  - nbconvert
+  - requests
+  # Added later in the project (modeling stage):
+  # - pytorch, xgboost, scikit-learn
