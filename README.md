@@ -76,5 +76,4 @@ Landsea, C. W., & Franklin, J. L. (2013). Atlantic hurricane database uncertaint
 
 ## AI-tool disclosure
 
-Claude (Anthropic) was used to help write code and documentation in this repository. All code was reviewed,
-run, and checked by the author.
+Claude (Anthropic) was used to help with documentation in this repository. All code was supervised , reviewed, run, and checked by the author.
