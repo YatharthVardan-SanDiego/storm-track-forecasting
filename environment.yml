@@ -12,5 +12,9 @@ dependencies:
   - ipykernel
   - nbconvert
   - requests
-  # Added later in the project (modeling stage):
-  # - pytorch, xgboost, scikit-learn
+  - pip
+  - pip:
+      - xgboost>=3.0       # notebook 03 (baselines)
+      - scikit-learn>=1.5  # notebook 03 (baselines)
+  # Added later in the project (neural network stage):
+  # - pytorch

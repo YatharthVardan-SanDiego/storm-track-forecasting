@@ -10,5 +10,6 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 
-# Model artifacts (added on training day)
+# Model artifacts: recreated by the notebooks (XGBoost in notebook 03 takes under a minute)
 models/*.pt
+models/*.json
