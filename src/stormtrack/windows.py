@@ -89,3 +89,37 @@ def track_error_km(samples: pd.DataFrame, pred_disp: np.ndarray) -> np.ndarray:
     """Great-circle distance (km) between forecast and actual position, per sample."""
     lat_p, lon_p = to_latlon(samples["LAT"], samples["LON"], pred_disp[:, 0], pred_disp[:, 1])
     return haversine_km(lat_p, lon_p, samples["lat_true"], samples["lon_true"])
+
+
+STEP_FEATURES = ["dx", "dy", "lat", "wind_kt", "valid"]
+STATIC_COLS = ["sin_lon", "cos_lon", "sin_doy", "cos_doy", "dist2land_km"]
+
+
+def build_sequences(df: pd.DataFrame, samples: pd.DataFrame, n_steps: int = HISTORY - 1) -> np.ndarray:
+    """Step-by-step history for each forecast origin in `samples`, for recurrent models.
+
+    Returns an array of shape (n_samples, n_steps, len(STEP_FEATURES)), oldest step
+    first. Step k (counting back from the origin) describes the fix k steps before the
+    origin: the 6-hour motion that brought the storm there (dx, dy in the origin's km
+    frame), its latitude and wind, and a `valid` flag. With the default n_steps = 3 the
+    model sees exactly the same 4 fixes as the baselines. Longer histories reach further
+    back; where a segment does not go back that far, the step is zero-filled and
+    `valid` = 0, so every model is still scored on the same set of origins.
+    """
+    d = df.sort_values(["SEG_ID", "ISO_TIME"]).reset_index(drop=True)
+    g = d.groupby("SEG_ID")
+    key = d["SEG_ID"] + "|" + d["ISO_TIME"].astype(str)
+    row_of = pd.Series(np.arange(len(d)), index=key)
+    rows = row_of.loc[samples["SEG_ID"] + "|" + samples["ISO_TIME"].astype(str)].to_numpy()
+
+    coslat0 = np.cos(np.radians(d["LAT"].to_numpy()))[rows]
+    seq = np.zeros((len(rows), n_steps, len(STEP_FEATURES)), dtype=np.float32)
+    for k in range(n_steps):
+        la_a, lo_a = g["LAT"].shift(k).to_numpy()[rows], g["LON"].shift(k).to_numpy()[rows]
+        la_b, lo_b = g["LAT"].shift(k + 1).to_numpy()[rows], g["LON"].shift(k + 1).to_numpy()[rows]
+        wind = g["wind_kt"].shift(k).to_numpy()[rows]
+        valid = ~np.isnan(la_b)
+        feats = np.stack([wrap_lon(lo_a - lo_b) * KM_PER_DEG * coslat0, (la_a - la_b) * KM_PER_DEG,
+                          la_a, wind, valid.astype(float)], axis=1)
+        seq[:, n_steps - 1 - k, :] = np.where(valid[:, None], np.nan_to_num(feats), 0.0)
+    return seq
