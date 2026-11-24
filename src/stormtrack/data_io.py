@@ -60,3 +60,17 @@ def load_hurdat2(path=HURDAT2_TXT) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df.loc[df["PRES"] < 0, "PRES"] = pd.NA  # -999 = missing
     return df
+
+
+CLEAN_TRACKS = PROCESSED / "tracks_clean.csv.gz"
+
+
+def load_clean(path=CLEAN_TRACKS) -> pd.DataFrame:
+    """Load the cleaned track table written by notebook 01.
+
+    As with the raw file, pandas' default NA strings are switched off so the
+    basin/sub-basin code "NA" (North Atlantic) stays text instead of NaN.
+    """
+    df = pd.read_csv(path, keep_default_na=False, na_values=[""],
+                     parse_dates=["ISO_TIME"], low_memory=False)
+    return df.sort_values(["SEG_ID", "ISO_TIME"]).reset_index(drop=True)
