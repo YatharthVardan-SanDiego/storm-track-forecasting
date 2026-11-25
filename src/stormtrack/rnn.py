@@ -43,9 +43,23 @@ def distance_loss(pred_scaled, target_scaled, y_scale):
     return torch.sqrt((diff ** 2).sum(dim=1) + 1e-6).mean()
 
 
+def mse_loss(pred_scaled, target_scaled, y_scale=None):
+    """Plain mean squared error in scaled units (the usual regression loss), for comparison."""
+    return ((pred_scaled - target_scaled) ** 2).mean()
+
+
+LOSSES = {"distance": distance_loss, "mse": mse_loss}
+
+
 def train_model(model, train_tensors, val_tensors, y_scale, device, epochs=80, batch_size=512,
-                lr=1e-3, weight_decay=1e-4, patience=10, seed=42, verbose=True):
-    """Train with AdamW and early stopping on validation loss; return best model and history."""
+                lr=1e-3, weight_decay=1e-4, patience=10, seed=42, verbose=True, loss="distance"):
+    """Train with AdamW and early stopping; return the best model and the per-epoch history.
+
+    `loss` picks what the optimizer minimizes ("distance" or "mse"). Whatever the choice,
+    early stopping and the reported numbers always use the mean distance error in km on
+    the validation set, so runs with different losses are judged the same way.
+    """
+    loss_fn = LOSSES[loss]
     torch.manual_seed(seed)
     gen = torch.Generator().manual_seed(seed)
     model = model.to(device)
@@ -65,11 +79,13 @@ def train_model(model, train_tensors, val_tensors, y_scale, device, epochs=80, b
         for start in range(0, n, batch_size):
             idx = perm[start:start + batch_size]
             opt.zero_grad()
-            loss = distance_loss(model(Xs_tr[idx], Xc_tr[idx]), Y_tr[idx], y_scale)
+            out = model(Xs_tr[idx], Xc_tr[idx])
+            loss = loss_fn(out, Y_tr[idx], y_scale)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-            total += loss.item() * len(idx)
+            with torch.no_grad():                      # always report training error in km
+                total += distance_loss(out, Y_tr[idx], y_scale).item() * len(idx)
         model.eval()
         with torch.no_grad():
             val = distance_loss(model(Xs_va, Xc_va), Y_va, y_scale).item()

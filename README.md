@@ -17,7 +17,7 @@ against the National Hurricane Center's official 24-hour error as a benchmark.
 | EDA | `notebooks/02_eda.ipynb` | Done |
 | Model / Pipeline Design & Building | `notebooks/03_baselines.ipynb` (shared pipeline + baselines) | Done |
 | Model Training | `notebooks/03_baselines.ipynb` (baselines), `notebooks/04_lstm_gru.ipynb` (LSTM/GRU) | Done |
-| Model Optimization | | Planned |
+| Model Optimization | `notebooks/05_tuning.ipynb` | Done |
 | Model / Pipeline Analysis & Discussion | | Planned |
 
 ## Data
@@ -36,7 +36,7 @@ script below.
 conda env create -f environment.yml
 conda activate stormtrack
 python scripts/download_data.py
-jupyter notebook   # then run notebooks 01 to 04 in order
+jupyter notebook   # then run notebooks 01 to 05 in order
 ```
 
 ## Files
@@ -50,12 +50,13 @@ jupyter notebook   # then run notebooks 01 to 04 in order
 | `src/stormtrack/__init__.py` | Marks `stormtrack` as a Python package of shared helpers. |
 | `src/stormtrack/data_io.py` | Loaders: `load_ibtracs()` reads the IBTrACS CSV (skips the units row, keeps basin code "NA" as text); `load_hurdat2()` parses the HURDAT2 text format into one row per fix; `load_clean()` reads the cleaned table from notebook 01 (also keeping "NA" as text). |
 | `src/stormtrack/windows.py` | Forecast pipeline shared by all models: `build_samples()` turns tracks into 24-h forecast samples (4 fixes of history → position 24 h later) with motion, location, season, intensity and land features; `persistence_displacement()`; `to_latlon()` and `track_error_km()` turn predicted displacements into positions and great-circle errors; `build_sequences()` lays out each sample's history step by step for the recurrent models. |
-| `src/stormtrack/rnn.py` | Recurrent forecaster (`RNNForecaster`: LSTM or GRU encoder + static features + MLP head predicting a correction to persistence), the distance loss (mean km error), the training loop with early stopping, and batched prediction. |
+| `src/stormtrack/rnn.py` | Recurrent forecaster (`RNNForecaster`: LSTM or GRU encoder + static features + MLP head predicting a correction to persistence), the distance loss (mean km error), the training loop with early stopping (optimizing distance or squared error, always early-stopped on km error), and batched prediction. |
 | `src/stormtrack/geo.py` | Geographic helpers: haversine great-circle distance (km), compass bearing, and longitude wrapping to [-180, 180). |
 | `notebooks/01_data_cleaning.ipynb` | **Data Cleaning.** Keeps finalized main tracks through 2024, 6-hourly synoptic fixes, and tropical/subtropical stages; builds one 1-minute wind column and one pressure column; splits storms into continuous segments of at least 42 h; adds motion features; cross-checks Atlantic positions with HURDAT2; assigns season-based train/val/test splits; saves the clean table and a cleaning log. |
 | `notebooks/02_eda.ipynb` | **Exploratory Data Analysis.** Data volume by basin, season and split; track map; speed and heading and how they change with latitude; autocorrelation of motion; intensity and missing pressure; the 24-hour displacement target and the error of two naive forecasts (no motion, persistence); comparison of the splits. Ends with a table of modeling decisions. |
 | `notebooks/03_baselines.ipynb` | **Baseline models.** Builds forecast samples; trains and compares no-motion, persistence, CLIPER-style linear regression and XGBoost on the validation seasons; tests direct vs residual targets; storm-level paired bootstrap; error by latitude; feature importance; an example storm (Jose, 2017). Saves validation predictions and the XGBoost models. |
 | `notebooks/04_lstm_gru.ipynb` | **LSTM and GRU.** Builds step-by-step sequences, trains an LSTM and a GRU (PyTorch, Apple GPU) on a distance loss with early stopping, checks stability over 3 seeds, compares 3-seed ensembles with the baselines (bootstrap, latitude, Hurricane Jose). Note: XGBoost and PyTorch are never loaded in the same session (their OpenMP libraries conflict on macOS). |
+| `notebooks/05_tuning.ipynb` | **Model optimization.** One-at-a-time search on the validation seasons: distance vs squared-error loss, 24/48/72-hour history (padded with a `valid` flag so all models forecast the same origins), hidden size and depth; ties within 0.3 km go to the simpler option. Trains the tuned GRU and LSTM with 3 seeds and compares them with all earlier models. |
 | `reports/figures/fig01_cleaning_funnel.png` | Figure: fixes remaining after each cleaning step (for the report's Data Summary). |
 | `reports/figures/fig02_storms_per_season.png` | Figure: storms per season by basin, with split boundaries. |
 | `reports/figures/fig03_track_map.png` | Figure: all clean tracks, colored by basin. |
@@ -73,9 +74,11 @@ jupyter notebook   # then run notebooks 01 to 04 in order
 | `reports/figures/fig15_rnn_learning_curves.png` | Figure: LSTM and GRU training/validation loss per epoch. |
 | `reports/figures/fig16_error_by_latitude_rnn.png` | Figure: validation error by latitude band, baselines and recurrent networks. |
 | `reports/figures/fig17_jose_xgb_vs_lstm.png` | Figure: XGBoost and LSTM 24-h forecasts along Hurricane Jose (2017). |
-| `models/` | Saved models, not tracked: `xgb_dx.json`, `xgb_dy.json`, `xgb_config.json` (notebook 03); `lstm_seed*.pt`, `gru_seed*.pt`, `rnn_config.json` (notebook 04). |
+| `reports/figures/fig18_tuning_results.png` | Figure: validation error for every tuning run, by experiment. |
+| `reports/figures/fig19_tuned_vs_all.png` | Figure: validation error of all models before and after tuning. |
+| `models/` | Saved models, not tracked: `xgb_dx.json`, `xgb_dy.json`, `xgb_config.json` (notebook 03); `lstm_seed*.pt`, `gru_seed*.pt`, `rnn_config.json` (notebook 04); `tuned_gru_seed*.pt`, `tuned_lstm_seed*.pt`, `tuned_config.json` (notebook 05). |
 | `data/raw/` | Raw downloads (not tracked). |
-| `data/processed/` | Notebook outputs, not tracked: `tracks_clean.csv.gz` (105,747 clean fixes) `cleaning_log.csv` (rows kept at each step), `eda_baselines.csv` (naive-forecast errors by split, from notebook 02), `preds_val_baselines.csv` (per-forecast validation errors and positions of each baseline, from notebook 03), and `preds_val_rnn.csv` (per-forecast validation errors of the LSTM and GRU ensembles, from notebook 04). |
+| `data/processed/` | Notebook outputs, not tracked: `tracks_clean.csv.gz` (105,747 clean fixes), `cleaning_log.csv` (rows kept at each step), `eda_baselines.csv` (naive-forecast errors by split, from notebook 02), `preds_val_baselines.csv` (per-forecast validation errors and positions of each baseline, from notebook 03), `preds_val_rnn.csv` (per-forecast validation errors of the LSTM and GRU ensembles, from notebook 04), `preds_val_tuned.csv` and `tuning_log.csv` (tuned ensembles' errors and every tuning run, from notebook 05). |
 | `reports/notebook_pdfs/` | PDF exports of each notebook for the final submission (added at the end). |
 
 ## Cleaning results (summary)
@@ -104,11 +107,15 @@ jupyter notebook   # then run notebooks 01 to 04 in order
 | Linear regression (CLIPER-style) | 158 km | 166 km | 5.8% |
 | XGBoost (residual target) | 148.5 km | 164 km | 11.6% |
 | LSTM (3-seed ensemble) | 146.0 km | 157 km | 13.0% |
-| **GRU (3-seed ensemble)** | **145.2 km** | **156 km** | **13.5%** |
+| GRU (3-seed ensemble) | 145.2 km | 156 km | 13.5% |
+| LSTM tuned (48-h history, 128 units) | 144.3 km | 155 km | 14.1% |
+| **GRU tuned (48-h history, 128 units)** | **144.0 km** | **156 km** | **14.3%** |
 
 The test seasons (2020–2024) are held out for the final evaluation. NHC's official Atlantic 24-hour error for 2020–2024 is about 63 km.
 
 ## References
+
+Bergstra, J., & Bengio, Y. (2012). Random search for hyper-parameter optimization. *Journal of Machine Learning Research, 13*, 281–305.
 
 Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system. In *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining* (pp. 785–794). https://doi.org/10.1145/2939672.2939785
 
