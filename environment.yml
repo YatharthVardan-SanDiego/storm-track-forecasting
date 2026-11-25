@@ -17,3 +17,4 @@ dependencies:
       - xgboost>=3.0       # notebook 03 (baselines)
       - scikit-learn>=1.5  # notebook 03 (baselines)
       - torch>=2.3         # notebook 04 (LSTM/GRU); uses the Apple GPU (MPS) when available
+      - optuna>=4.0        # notebook 06 (Bayesian hyperparameter search)

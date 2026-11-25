@@ -52,12 +52,16 @@ LOSSES = {"distance": distance_loss, "mse": mse_loss}
 
 
 def train_model(model, train_tensors, val_tensors, y_scale, device, epochs=80, batch_size=512,
-                lr=1e-3, weight_decay=1e-4, patience=10, seed=42, verbose=True, loss="distance"):
+                lr=1e-3, weight_decay=1e-4, patience=10, seed=42, verbose=True, loss="distance",
+                on_epoch=None):
     """Train with AdamW and early stopping; return the best model and the per-epoch history.
 
     `loss` picks what the optimizer minimizes ("distance" or "mse"). Whatever the choice,
     early stopping and the reported numbers always use the mean distance error in km on
     the validation set, so runs with different losses are judged the same way.
+
+    `on_epoch(epoch, val_km)`, if given, is called after every epoch. A hyperparameter
+    search uses it to report progress and to stop unpromising runs early (pruning).
     """
     loss_fn = LOSSES[loss]
     torch.manual_seed(seed)
@@ -90,6 +94,8 @@ def train_model(model, train_tensors, val_tensors, y_scale, device, epochs=80, b
         with torch.no_grad():
             val = distance_loss(model(Xs_va, Xc_va), Y_va, y_scale).item()
         sched.step(val)
+        if on_epoch is not None:
+            on_epoch(epoch, val)
         hist.append({"epoch": epoch, "train_km": total / n, "val_km": val,
                      "lr": opt.param_groups[0]["lr"], "secs": time.time() - t0})
         if val < best - 0.01:
