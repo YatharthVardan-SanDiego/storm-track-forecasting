@@ -9,6 +9,12 @@ It cleans the global IBTrACS best-track archive, then compares simple baselines 
 recurrent neural networks (LSTM, GRU) on held-out recent seasons, measuring great-circle track error in km
 against the National Hurricane Center's official 24-hour error as a benchmark.
 
+The work is organised as two studies:
+
+- **Study A (notebooks 01–06):** track-only forecasting on the full 1980–2024 record, with a locked 2020–2024 test set.
+- **Study B (notebooks 07a–07b):** a controlled experiment that adds steering winds from a second dataset, the
+  NCEP/NCAR Reanalysis 1, on its own chronological split of the years where both datasets are available.
+
 ## Project status
 
 | Stage (rubric section) | Notebook | Status |
@@ -18,7 +24,8 @@ against the National Hurricane Center's official 24-hour error as a benchmark.
 | Model / Pipeline Design & Building | `notebooks/03_baselines.ipynb` (shared pipeline + baselines) | Done |
 | Model Training | `notebooks/03_baselines.ipynb` (baselines), `notebooks/04_lstm_gru.ipynb` (LSTM/GRU) | Done |
 | Model Optimization | `notebooks/05_tuning.ipynb` (round 1), `notebooks/06_tuning_bayesian.ipynb` (round 2) | Done |
-| Model / Pipeline Analysis & Discussion | | Planned |
+| Data Sources, Feature Engineering, Training, Evaluation (Study B: steering winds) | `notebooks/07a_steering_winds_xgboost.ipynb`, `notebooks/07b_steering_winds_gru.ipynb` | Done |
+| Model / Pipeline Analysis & Discussion (Study A final test) | | Planned |
 
 ## Data
 
@@ -26,9 +33,11 @@ against the National Hurricane Center's official 24-hour error as a benchmark.
 |---|---|---|
 | IBTrACS v04r01, "since 1980" CSV (145 MB) | NOAA NCEI (Gahtan et al., 2024; Knapp et al., 2010) | Main dataset: global storm positions, winds and pressures every 6 hours |
 | HURDAT2 Atlantic best track, 1851–2024 (7 MB) | NOAA NHC (Landsea & Franklin, 2013) | Cross-check of Atlantic positions |
+| NCEP/NCAR Reanalysis 1 winds, 850/500/200 hPa, 6-hourly, 2.5° (about 76 MB per year after subsetting) | NOAA PSL (Kalnay et al., 1996) | Study B: steering-flow features around each storm |
 
-Both are public U.S. government datasets. They are **not** stored in this repository; download them with the
-script below.
+All are public U.S. government datasets. They are **not** stored in this repository; download them with the
+scripts below. The NCEP download covers 1980–2012 except 2001 and 2009: NOAA's server began rate-limiting
+requests (HTTP 429) partway through, so Study B uses the 31 years that arrived.
 
 ## How to run
 
@@ -36,7 +45,8 @@ script below.
 conda env create -f environment.yml
 conda activate stormtrack
 python scripts/download_data.py
-jupyter notebook   # then run notebooks 01 to 06 in order
+python scripts/download_ncep.py   # NCEP winds for Study B; re-run to resume after an interruption
+jupyter notebook                  # then run notebooks 01 to 07b in order
 ```
 
 ## Files
@@ -44,13 +54,15 @@ jupyter notebook   # then run notebooks 01 to 06 in order
 | Path | Description |
 |---|---|
 | `README.md` | This file: project overview, how to run, and a description of every file. |
-| `environment.yml` | Conda environment (Python 3.12, pandas, NumPy, Matplotlib, Jupyter, scikit-learn, XGBoost, PyTorch, Optuna). |
+| `environment.yml` | Conda environment (Python 3.12, pandas, NumPy, Matplotlib, Jupyter, scikit-learn, XGBoost, PyTorch, Optuna, xarray, netCDF4). |
 | `.gitignore` | Keeps raw/processed data, checkpoints and caches out of git. |
+| `scripts/download_ncep.py` | Downloads NCEP/NCAR Reanalysis 1 u/v winds at 850, 500 and 200 hPa (62.5°N–60°S) one year at a time via OPeNDAP, in 30-day pieces with pauses and retries; checks every year for a complete 6-hourly time axis, missing values and truncated (zero-filled) transfers; saves `data/raw/ncep/ncep_winds_<year>.nc`; skips years already on disk. |
 | `scripts/download_data.py` | Downloads IBTrACS and HURDAT2 into `data/raw/`, skipping files already present and printing size and checksum. |
 | `src/stormtrack/__init__.py` | Marks `stormtrack` as a Python package of shared helpers. |
 | `src/stormtrack/data_io.py` | Loaders: `load_ibtracs()` reads the IBTrACS CSV (skips the units row, keeps basin code "NA" as text); `load_hurdat2()` parses the HURDAT2 text format into one row per fix; `load_clean()` reads the cleaned table from notebook 01 (also keeping "NA" as text). |
 | `src/stormtrack/windows.py` | Forecast pipeline shared by all models: `build_samples()` turns tracks into 24-h forecast samples (4 fixes of history → position 24 h later) with motion, location, season, intensity and land features; `persistence_displacement()`; `to_latlon()` and `track_error_km()` turn predicted displacements into positions and great-circle errors; `build_sequences()` lays out each sample's history step by step for the recurrent models. |
 | `src/stormtrack/rnn.py` | Recurrent forecaster (`RNNForecaster`: LSTM or GRU encoder + static features + MLP head predicting a correction to persistence), the distance loss (mean km error), the training loop with early stopping (optimizing distance or squared error, always early-stopped on km error; an `on_epoch` hook lets a hyperparameter search prune runs), and batched prediction. |
+| `src/stormtrack/steering.py` | Steering-flow features: area-weighted mean u/v wind in a 200–800 km ring around each storm at 850, 500 and 200 hPa, at the forecast time only; deep-layer mean wind, vertical shear, 24-h steering displacement and its difference from persistence. |
 | `src/stormtrack/geo.py` | Geographic helpers: haversine great-circle distance (km), compass bearing, and longitude wrapping to [-180, 180). |
 | `notebooks/01_data_cleaning.ipynb` | **Data Cleaning.** Keeps finalized main tracks through 2024, 6-hourly synoptic fixes, and tropical/subtropical stages; builds one 1-minute wind column and one pressure column; splits storms into continuous segments of at least 42 h; adds motion features; cross-checks Atlantic positions with HURDAT2; assigns season-based train/val/test splits; saves the clean table and a cleaning log. |
 | `notebooks/02_eda.ipynb` | **Exploratory Data Analysis.** Data volume by basin, season and split; track map; speed and heading and how they change with latitude; autocorrelation of motion; intensity and missing pressure; the 24-hour displacement target and the error of two naive forecasts (no motion, persistence); comparison of the splits. Ends with a table of modeling decisions. |
@@ -58,6 +70,8 @@ jupyter notebook   # then run notebooks 01 to 06 in order
 | `notebooks/04_lstm_gru.ipynb` | **LSTM and GRU.** Builds step-by-step sequences, trains an LSTM and a GRU (PyTorch, Apple GPU) on a distance loss with early stopping, checks stability over 3 seeds, compares 3-seed ensembles with the baselines (bootstrap, latitude, Hurricane Jose). Note: XGBoost and PyTorch are never loaded in the same session (their OpenMP libraries conflict on macOS). |
 | `notebooks/05_tuning.ipynb` | **Model optimization.** One-at-a-time search on the validation seasons: distance vs squared-error loss, 24/48/72-hour history (padded with a `valid` flag so all models forecast the same origins), hidden size and depth; ties within 0.3 km go to the simpler option. Trains the tuned GRU and LSTM with 3 seeds and compares them with all earlier models. |
 | `notebooks/06_tuning_bayesian.ipynb` | **Model optimization, round 2.** Bayesian search with Optuna (TPE sampler + median pruning, 40 trials) over cell type, history, width, depth, dropout, learning rate, weight decay and batch size, jointly. Trials train on 1980–2013 and are scored on 2014–2016, so the validation seasons stay untouched; fANOVA hyperparameter importance; the best configuration is trained with 3 seeds and compared with round 1. |
+| `notebooks/07a_steering_winds_xgboost.ipynb` | **Study B, part 1.** Introduces the NCEP winds; builds the Study B split (train 1980–2004, validation 2005–2008, test 2009–2013); computes steering features and checks them physically (Katrina, 2005) and statistically; compares persistence, steering-only, ridge and XGBoost with and without winds on validation and test, with storm-level bootstrap; feature importance. |
+| `notebooks/07b_steering_winds_gru.ipynb` | **Study B, part 2.** Trains the round 2 GRU (unchanged settings, 3 seeds) with and without winds on the Study B split; compares all models on validation and test with bootstrap intervals; error by latitude; an example storm (Nadine, 2012). |
 | `reports/figures/fig01_cleaning_funnel.png` | Figure: fixes remaining after each cleaning step (for the report's Data Summary). |
 | `reports/figures/fig02_storms_per_season.png` | Figure: storms per season by basin, with split boundaries. |
 | `reports/figures/fig03_track_map.png` | Figure: all clean tracks, colored by basin. |
@@ -80,9 +94,16 @@ jupyter notebook   # then run notebooks 01 to 06 in order
 | `reports/figures/fig20_optuna_history.png` | Figure: Optuna search history (completed and pruned trials, best so far). |
 | `reports/figures/fig21_optuna_importance.png` | Figure: hyperparameter importance (fANOVA). |
 | `reports/figures/fig22_round2_by_latitude.png` | Figure: validation error by latitude, XGBoost vs round 1 vs round 2 GRU. |
-| `models/` | Saved models, not tracked: `xgb_dx.json`, `xgb_dy.json`, `xgb_config.json` (notebook 03); `lstm_seed*.pt`, `gru_seed*.pt`, `rnn_config.json` (notebook 04); `tuned_gru_seed*.pt`, `tuned_lstm_seed*.pt`, `tuned_config.json` (notebook 05); `round2_gru_seed*.pt`, `round2_config.json` (notebook 06). |
+| `reports/figures/fig23_steering_ring_katrina.png` | Figure: deep-layer steering flow and the 200–800 km ring around Hurricane Katrina, with persistence, steering and actual 24-h motion. |
+| `reports/figures/fig24_steering_vs_motion.png` | Figure: steering displacement vs actual motion, and steering-minus-persistence vs persistence error. |
+| `reports/figures/fig25_studyb_xgb_results.png` | Figure: Study B validation and test errors for persistence, steering only, ridge and XGBoost with/without winds. |
+| `reports/figures/fig26_xgb_importance_with_winds.png` | Figure: XGBoost feature importance with steering features. |
+| `reports/figures/fig27_studyb_test_results.png` | Figure: Study B test errors for every model with and without winds, all basins and North Atlantic. |
+| `reports/figures/fig28_studyb_by_latitude.png` | Figure: Study B test error by latitude band, with and without winds. |
+| `reports/figures/fig29_studyb_example_storm.png` | Figure: GRU 24-h forecasts with and without winds along Nadine (2012). |
+| `models/` | Saved models, not tracked: `xgb_dx.json`, `xgb_dy.json`, `xgb_config.json` (notebook 03); `lstm_seed*.pt`, `gru_seed*.pt`, `rnn_config.json` (notebook 04); `tuned_gru_seed*.pt`, `tuned_lstm_seed*.pt`, `tuned_config.json` (notebook 05); `round2_gru_seed*.pt`, `round2_config.json` (notebook 06); `studyb_gru_tracks_only_seed*.pt`, `studyb_gru_tracks_winds_seed*.pt`, `studyb_config.json` (notebook 07b). |
 | `data/raw/` | Raw downloads (not tracked). |
-| `data/processed/` | Notebook outputs, not tracked: `tracks_clean.csv.gz` (105,747 clean fixes), `cleaning_log.csv` (rows kept at each step), `eda_baselines.csv` (naive-forecast errors by split, from notebook 02), `preds_val_baselines.csv` (per-forecast validation errors and positions of each baseline, from notebook 03), `preds_val_rnn.csv` (per-forecast validation errors of the LSTM and GRU ensembles, from notebook 04), `preds_val_tuned.csv` and `tuning_log.csv` (tuned ensembles' errors and every tuning run, from notebook 05), `optuna_trials.csv` and `preds_val_round2.csv` (every Optuna trial and the round 2 ensemble's errors, from notebook 06). |
+| `data/processed/` | Notebook outputs, not tracked: `tracks_clean.csv.gz` (105,747 clean fixes), `cleaning_log.csv` (rows kept at each step), `eda_baselines.csv` (naive-forecast errors by split, from notebook 02), `preds_val_baselines.csv` (per-forecast validation errors and positions of each baseline, from notebook 03), `preds_val_rnn.csv` (per-forecast validation errors of the LSTM and GRU ensembles, from notebook 04), `preds_val_tuned.csv` and `tuning_log.csv` (tuned ensembles' errors and every tuning run, from notebook 05), `optuna_trials.csv` and `preds_val_round2.csv` (every Optuna trial and the round 2 ensemble's errors, from notebook 06), `steering_features.csv.gz` and `preds_studyb_xgb.csv` (Study B features, split and errors, from notebook 07a), `preds_studyb_gru.csv` (Study B GRU errors, from notebook 07b). |
 | `reports/notebook_pdfs/` | PDF exports of each notebook for the final submission (added at the end). |
 
 ## Cleaning results (summary)
@@ -102,7 +123,7 @@ jupyter notebook   # then run notebooks 01 to 06 in order
 - Naive 24-hour forecasts on the test seasons: no motion ≈ 399 km mean error; persistence ≈ 168 km (≈ 179 km North Atlantic only). NHC's official Atlantic error for 2020–2024 is about 63 km.
 - Persistence error roughly doubles beyond 30° latitude and rises when the storm is already turning: the cases a learned model should improve on.
 
-## Results so far (validation seasons 2017–2019)
+## Study A results so far (validation seasons 2017–2019)
 
 | Model | Mean 24-h error | North Atlantic | Skill vs persistence |
 |---|---|---|---|
@@ -118,6 +139,22 @@ jupyter notebook   # then run notebooks 01 to 06 in order
 
 The test seasons (2020–2024) are held out for the final evaluation. NHC's official Atlantic 24-hour error for 2020–2024 is about 63 km.
 
+## Study B results: adding steering winds (test seasons 2009–2013)
+
+Same 56,434 forecasts and split for every model; settings carried over unchanged from Study A. Errors are
+not comparable with Study A's, since the seasons differ.
+
+| Model | Mean 24-h error | North Atlantic | Skill vs persistence | Gain from winds (95% CI) |
+|---|---|---|---|---|
+| Persistence | 171.6 km | 183 km | 0% | |
+| Steering wind only | 225.2 km | 247 km | −31.2% | |
+| Linear regression, tracks only → + winds | 161.8 → 147.1 km | 163 → 145 km | 5.7% → 14.3% | 14.8 km (12.2–17.6) |
+| XGBoost, tracks only → + winds | 152.1 → 138.1 km | 153 → 140 km | 11.4% → 19.5% | 14.0 km (11.2–17.0) |
+| **GRU round 2, tracks only → + winds** | 149.0 → **136.2 km** | 151 → **139 km** | 13.2% → **20.7%** | 12.8 km (10.3–15.4) |
+
+Adding steering winds improved every model by 13–15 km, several times more than tuning or the choice of model.
+The gains are largest at 20–30° latitude, where storms recurve.
+
 ## References
 
 Akiba, T., Sano, S., Yanase, T., Ohta, T., & Koyama, M. (2019). Optuna: A next-generation hyperparameter optimization framework. In *Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining* (pp. 2623–2631). https://doi.org/10.1145/3292500.3330701
@@ -125,6 +162,10 @@ Akiba, T., Sano, S., Yanase, T., Ohta, T., & Koyama, M. (2019). Optuna: A next-g
 Bergstra, J., Bardenet, R., Bengio, Y., & Kégl, B. (2011). Algorithms for hyper-parameter optimization. In *Advances in Neural Information Processing Systems 24* (pp. 2546–2554).
 
 Bergstra, J., & Bengio, Y. (2012). Random search for hyper-parameter optimization. *Journal of Machine Learning Research, 13*, 281–305.
+
+Chan, J. C. L. (2005). The physics of tropical cyclone motion. *Annual Review of Fluid Mechanics, 37*, 99–128. https://doi.org/10.1146/annurev.fluid.37.061903.175702
+
+Chan, J. C. L., & Gray, W. M. (1982). Tropical cyclone movement and surrounding flow relationships. *Monthly Weather Review, 110*(10), 1354–1374. https://doi.org/10.1175/1520-0493(1982)110<1354:TCMASF>2.0.CO;2
 
 Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system. In *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining* (pp. 785–794). https://doi.org/10.1145/2939672.2939785
 
@@ -135,6 +176,8 @@ Gahtan, J., Knapp, K. R., Schreck, C. J., Diamond, H. J., Kossin, J. P., & Kruk,
 Hochreiter, S., & Schmidhuber, J. (1997). Long short-term memory. *Neural Computation, 9*(8), 1735–1780. https://doi.org/10.1162/neco.1997.9.8.1735
 
 Hutter, F., Hoos, H., & Leyton-Brown, K. (2014). An efficient approach for assessing hyperparameter importance. In *Proceedings of the 31st International Conference on Machine Learning* (pp. 754–762).
+
+Kalnay, E., Kanamitsu, M., Kistler, R., Collins, W., Deaven, D., Gandin, L., ... Joseph, D. (1996). The NCEP/NCAR 40-year reanalysis project. *Bulletin of the American Meteorological Society, 77*(3), 437–471. https://doi.org/10.1175/1520-0477(1996)077<0437:TNYRP>2.0.CO;2
 
 Knapp, K. R., Kruk, M. C., Levinson, D. H., Diamond, H. J., & Neumann, C. J. (2010). The International Best Track Archive for Climate Stewardship (IBTrACS). *Bulletin of the American Meteorological Society, 91*(3), 363–376.
 

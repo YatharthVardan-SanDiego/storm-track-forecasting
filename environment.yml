@@ -18,3 +18,5 @@ dependencies:
       - scikit-learn>=1.5  # notebook 03 (baselines)
       - torch>=2.3         # notebook 04 (LSTM/GRU); uses the Apple GPU (MPS) when available
       - optuna>=4.0        # notebook 06 (Bayesian hyperparameter search)
+      - xarray>=2024.1     # scripts/download_ncep.py (NCEP/NCAR reanalysis winds)
+      - netCDF4>=1.6       # reading NOAA's OPeNDAP server and the saved wind files
