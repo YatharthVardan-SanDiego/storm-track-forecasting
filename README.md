@@ -57,6 +57,8 @@ jupyter notebook                  # then run notebooks 01 to 08b in order
 | `environment.yml` | Conda environment (Python 3.12, pandas, NumPy, Matplotlib, Jupyter, scikit-learn, XGBoost, PyTorch, Optuna, xarray, netCDF4). |
 | `.gitignore` | Keeps raw/processed data, checkpoints and caches out of git. |
 | `scripts/download_ncep.py` | Downloads NCEP/NCAR Reanalysis 1 u/v winds at 850, 500 and 200 hPa (62.5°N–60°S) one year at a time via OPeNDAP, in 30-day pieces with pauses and retries; checks every year for a complete 6-hourly time axis, missing values and truncated (zero-filled) transfers; saves `data/raw/ncep/ncep_winds_<year>.nc`; skips years already on disk. |
+| `scripts/make_report_figures.py` | Redraws the main results at one-column size for the final report (track map, persistence by latitude, network architecture, final test results, error by latitude, Katrina steering flow, Study B results) from the files the notebooks saved; writes `reports/figures/report/`. |
+| `reports/figures/report/` | The seven column-sized figures used in the final report (`r1_`–`r7_`), produced by `scripts/make_report_figures.py`. |
 | `scripts/download_data.py` | Downloads IBTrACS and HURDAT2 into `data/raw/`, skipping files already present and printing size and checksum. |
 | `src/stormtrack/__init__.py` | Marks `stormtrack` as a Python package of shared helpers. |
 | `src/stormtrack/data_io.py` | Loaders: `load_ibtracs()` reads the IBTrACS CSV (skips the units row, keeps basin code "NA" as text); `load_hurdat2()` parses the HURDAT2 text format into one row per fix; `load_clean()` reads the cleaned table from notebook 01 (also keeping "NA" as text). |
