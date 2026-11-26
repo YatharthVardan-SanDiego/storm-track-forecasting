@@ -11,7 +11,7 @@ against the National Hurricane Center's official 24-hour error as a benchmark.
 
 The work is organised as two studies:
 
-- **Study A (notebooks 01–06):** track-only forecasting on the full 1980–2024 record, with a locked 2020–2024 test set.
+- **Study A (notebooks 01–06, final evaluation in 08a–08b):** track-only forecasting on the full 1980–2024 record, with a locked 2020–2024 test set.
 - **Study B (notebooks 07a–07b):** a controlled experiment that adds steering winds from a second dataset, the
   NCEP/NCAR Reanalysis 1, on its own chronological split of the years where both datasets are available.
 
@@ -25,7 +25,7 @@ The work is organised as two studies:
 | Model Training | `notebooks/03_baselines.ipynb` (baselines), `notebooks/04_lstm_gru.ipynb` (LSTM/GRU) | Done |
 | Model Optimization | `notebooks/05_tuning.ipynb` (round 1), `notebooks/06_tuning_bayesian.ipynb` (round 2) | Done |
 | Data Sources, Feature Engineering, Training, Evaluation (Study B: steering winds) | `notebooks/07a_steering_winds_xgboost.ipynb`, `notebooks/07b_steering_winds_gru.ipynb` | Done |
-| Model / Pipeline Analysis & Discussion (Study A final test) | | Planned |
+| Model / Pipeline Analysis & Discussion (Study A final test) | `notebooks/08a_final_test_baselines.ipynb`, `notebooks/08b_final_test_analysis.ipynb` | Done |
 
 ## Data
 
@@ -46,7 +46,7 @@ conda env create -f environment.yml
 conda activate stormtrack
 python scripts/download_data.py
 python scripts/download_ncep.py   # NCEP winds for Study B; re-run to resume after an interruption
-jupyter notebook                  # then run notebooks 01 to 07b in order
+jupyter notebook                  # then run notebooks 01 to 08b in order
 ```
 
 ## Files
@@ -72,6 +72,8 @@ jupyter notebook                  # then run notebooks 01 to 07b in order
 | `notebooks/06_tuning_bayesian.ipynb` | **Model optimization, round 2.** Bayesian search with Optuna (TPE sampler + median pruning, 40 trials) over cell type, history, width, depth, dropout, learning rate, weight decay and batch size, jointly. Trials train on 1980–2013 and are scored on 2014–2016, so the validation seasons stay untouched; fANOVA hyperparameter importance; the best configuration is trained with 3 seeds and compared with round 1. |
 | `notebooks/07a_steering_winds_xgboost.ipynb` | **Study B, part 1.** Introduces the NCEP winds; builds the Study B split (train 1980–2004, validation 2005–2008, test 2009–2013); computes steering features and checks them physically (Katrina, 2005) and statistically; compares persistence, steering-only, ridge and XGBoost with and without winds on validation and test, with storm-level bootstrap; feature importance. |
 | `notebooks/07b_steering_winds_gru.ipynb` | **Study B, part 2.** Trains the round 2 GRU (unchanged settings, 3 seeds) with and without winds on the Study B split; compares all models on validation and test with bootstrap intervals; error by latitude; an example storm (Nadine, 2012). |
+| `notebooks/08a_final_test_baselines.ipynb` | **Final evaluation, part 1.** Reloads the baselines (XGBoost from disk, ridge refit), proves they reproduce notebook 03's validation scores exactly, then scores no motion, persistence, linear regression and XGBoost on the locked 2020–2024 test seasons. |
+| `notebooks/08b_final_test_analysis.ipynb` | **Final evaluation, part 2.** Reloads all five neural ensembles (notebooks 04–06) and checks them against their saved validation errors; final test table with bootstrap intervals; validation-vs-test consistency; comparison with NHC's official Atlantic error by season; errors by basin, latitude, intensity and season; error distribution; profile of the worst 1% of forecasts; an example storm (Franklin, 2023). |
 | `reports/figures/fig01_cleaning_funnel.png` | Figure: fixes remaining after each cleaning step (for the report's Data Summary). |
 | `reports/figures/fig02_storms_per_season.png` | Figure: storms per season by basin, with split boundaries. |
 | `reports/figures/fig03_track_map.png` | Figure: all clean tracks, colored by basin. |
@@ -101,9 +103,15 @@ jupyter notebook                  # then run notebooks 01 to 07b in order
 | `reports/figures/fig27_studyb_test_results.png` | Figure: Study B test errors for every model with and without winds, all basins and North Atlantic. |
 | `reports/figures/fig28_studyb_by_latitude.png` | Figure: Study B test error by latitude band, with and without winds. |
 | `reports/figures/fig29_studyb_example_storm.png` | Figure: GRU 24-h forecasts with and without winds along Nadine (2012). |
+| `reports/figures/fig30_final_test_results.png` | Figure: final test errors of every model, all basins and North Atlantic, vs NHC. |
+| `reports/figures/fig31_validation_vs_test.png` | Figure: each model's validation error next to its test error. |
+| `reports/figures/fig32_test_error_by_basin_latitude.png` | Figure: test error by basin and by latitude band (persistence, XGBoost, GRU round 2). |
+| `reports/figures/fig33_test_error_by_intensity_season.png` | Figure: test error by intensity at forecast time and by season. |
+| `reports/figures/fig34_test_error_cdf.png` | Figure: cumulative distribution of test errors. |
+| `reports/figures/fig35_test_example_storm.png` | Figure: persistence, XGBoost and GRU 24-h forecasts along Franklin (2023). |
 | `models/` | Saved models, not tracked: `xgb_dx.json`, `xgb_dy.json`, `xgb_config.json` (notebook 03); `lstm_seed*.pt`, `gru_seed*.pt`, `rnn_config.json` (notebook 04); `tuned_gru_seed*.pt`, `tuned_lstm_seed*.pt`, `tuned_config.json` (notebook 05); `round2_gru_seed*.pt`, `round2_config.json` (notebook 06); `studyb_gru_tracks_only_seed*.pt`, `studyb_gru_tracks_winds_seed*.pt`, `studyb_config.json` (notebook 07b). |
 | `data/raw/` | Raw downloads (not tracked). |
-| `data/processed/` | Notebook outputs, not tracked: `tracks_clean.csv.gz` (105,747 clean fixes), `cleaning_log.csv` (rows kept at each step), `eda_baselines.csv` (naive-forecast errors by split, from notebook 02), `preds_val_baselines.csv` (per-forecast validation errors and positions of each baseline, from notebook 03), `preds_val_rnn.csv` (per-forecast validation errors of the LSTM and GRU ensembles, from notebook 04), `preds_val_tuned.csv` and `tuning_log.csv` (tuned ensembles' errors and every tuning run, from notebook 05), `optuna_trials.csv` and `preds_val_round2.csv` (every Optuna trial and the round 2 ensemble's errors, from notebook 06), `steering_features.csv.gz` and `preds_studyb_xgb.csv` (Study B features, split and errors, from notebook 07a), `preds_studyb_gru.csv` (Study B GRU errors, from notebook 07b). |
+| `data/processed/` | Notebook outputs, not tracked: `tracks_clean.csv.gz` (105,747 clean fixes), `cleaning_log.csv` (rows kept at each step), `eda_baselines.csv` (naive-forecast errors by split, from notebook 02), `preds_val_baselines.csv` (per-forecast validation errors and positions of each baseline, from notebook 03), `preds_val_rnn.csv` (per-forecast validation errors of the LSTM and GRU ensembles, from notebook 04), `preds_val_tuned.csv` and `tuning_log.csv` (tuned ensembles' errors and every tuning run, from notebook 05), `optuna_trials.csv` and `preds_val_round2.csv` (every Optuna trial and the round 2 ensemble's errors, from notebook 06), `steering_features.csv.gz` and `preds_studyb_xgb.csv` (Study B features, split and errors, from notebook 07a), `preds_studyb_gru.csv` (Study B GRU errors, from notebook 07b), `preds_test_baselines.csv` (baselines' test errors and positions, from 08a), `preds_test_all.csv` and `final_results_test.csv` (every model's test errors and the final table, from 08b). |
 | `reports/notebook_pdfs/` | PDF exports of each notebook for the final submission (added at the end). |
 
 ## Cleaning results (summary)
@@ -123,7 +131,7 @@ jupyter notebook                  # then run notebooks 01 to 07b in order
 - Naive 24-hour forecasts on the test seasons: no motion ≈ 399 km mean error; persistence ≈ 168 km (≈ 179 km North Atlantic only). NHC's official Atlantic error for 2020–2024 is about 63 km.
 - Persistence error roughly doubles beyond 30° latitude and rises when the storm is already turning: the cases a learned model should improve on.
 
-## Study A results so far (validation seasons 2017–2019)
+## Study A: validation results (seasons 2017–2019)
 
 | Model | Mean 24-h error | North Atlantic | Skill vs persistence |
 |---|---|---|---|
@@ -137,7 +145,26 @@ jupyter notebook                  # then run notebooks 01 to 07b in order
 | GRU tuned, round 1 (48-h history, 128 units) | 144.0 km | 156 km | 14.3% |
 | **GRU tuned, round 2 (Optuna: 48-h history, 256×2, dropout 0.3)** | **143.8 km** | **154 km** | **14.4%** |
 
-The test seasons (2020–2024) are held out for the final evaluation. NHC's official Atlantic 24-hour error for 2020–2024 is about 63 km.
+## Study A: final results on the test seasons (2020–2024)
+
+6,745 forecasts from 444 storms, never used for training or model choice. Every model was reloaded unchanged
+and first shown to reproduce its validation score exactly.
+
+| Model | Validation | **Test** | Test, North Atlantic | Test skill vs persistence |
+|---|---|---|---|---|
+| No motion | 391.1 km | 398.6 km | 461.7 km | −137.5% |
+| Persistence | 168.0 km | 167.8 km | 179.1 km | 0% |
+| Linear regression | 158.3 km | 159.8 km | 159.7 km | 4.7% |
+| XGBoost | 148.5 km | 150.3 km | 155.1 km | 10.4% |
+| LSTM | 146.0 km | 148.5 km | 151.5 km | 11.5% |
+| GRU | 145.2 km | 147.8 km | 150.6 km | 11.9% |
+| LSTM tuned | 144.3 km | 147.5 km | 150.5 km | 12.1% |
+| GRU tuned, round 1 | 144.0 km | 146.9 km | 149.2 km | 12.5% |
+| **GRU round 2 (chosen before testing)** | 143.8 km | **147.7 km** | **149.5 km** | **12.0%** |
+
+- The chosen GRU beats XGBoost by 2.6 km (95% CI 1.3–3.8) and persistence by 20.1 km (17.4–22.8).
+- The round 1 GRU beat it by 0.8 km (0.3–1.4): the small tuning gains on validation did not carry over. The chosen model is kept, since switching after seeing test results would be selecting on the test set.
+- NHC's official Atlantic 24-hour error for 2020–2024 is about 63 km; the chosen GRU's North Atlantic error is about 2.4 times that. The worst forecasts are sudden stalls, loops and accelerations driven by the surrounding weather, which Study B shows is the information a track-only model lacks.
 
 ## Study B results: adding steering winds (test seasons 2009–2013)
 
