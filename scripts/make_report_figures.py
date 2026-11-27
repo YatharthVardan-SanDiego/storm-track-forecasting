@@ -251,3 +251,20 @@ ax.axhline(0, color="#999", lw=0.6)
 ax.set(xlabel="Distance from the equator (° latitude)", ylabel="Speed (m/s)")
 ax.legend(frameon=False, loc="upper left", ncol=1)
 save(fig, "r9_wind_vs_motion_by_latitude.png")
+
+# --- R11. Round 2 (Optuna) search history -------------------------------------------------------
+trials = pd.read_csv(PROCESSED / "optuna_trials.csv")
+done = trials[trials["state"] == "COMPLETE"]
+pruned = trials[trials["state"] == "PRUNED"]
+best_so_far = trials["value"].where(trials["state"] == "COMPLETE").cummin().ffill()   # carry through pruned trials
+fig, ax = plt.subplots(figsize=(W, 1.95))
+ax.scatter(done["number"], done["value"], color=COL["XGBoost"], s=9, zorder=3, label=f"Completed trial ({len(done)})")
+ymin = done["value"].min() - 0.6
+ax.scatter(pruned["number"], np.full(len(pruned), ymin + 0.15), marker="|", color="#999", s=30,
+           label=f"Pruned trial ({len(pruned)})")
+ax.step(trials["number"], best_so_far, where="post", color=COL["GRU"], lw=1.1, label="Best so far")
+ax.axhline(trials.loc[trials["number"] == 0, "value"].iloc[0], color="k", ls="--", lw=0.7,
+           label="Round 1 configuration (trial 0)")
+ax.set(xlabel="Trial", ylabel="Error, 2014–2016 (km)", ylim=(ymin, done["value"].quantile(0.95) + 0.4))
+ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.45, -0.28), ncol=2, columnspacing=0.8)
+save(fig, "r11_optuna_history.png")
