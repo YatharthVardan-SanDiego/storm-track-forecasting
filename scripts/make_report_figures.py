@@ -209,3 +209,45 @@ ax.legend(handles=[Patch(facecolor="#999", alpha=0.4, label="Track features only
                    Line2D([], [], color=COL["Persistence"], ls="--", lw=0.8, label=f"Persistence ({xt['err_persistence_km'].mean():.1f} km)")],
           loc="lower right", framealpha=0.9)
 save(fig, "r7_studyb_test_results.png")
+
+# --- R8. How long storm motion stays persistent (for the Data Summary) ------------------------
+tr_sorted = tracks.sort_values(["SEG_ID", "ISO_TIME"])
+seg = tr_sorted.groupby("SEG_ID")
+lags = range(1, 13)
+ac = {"East–west motion": [], "North–south motion": []}
+for k in lags:
+    for name, col in (("East–west motion", "dx_km"), ("North–south motion", "dy_km")):
+        a, b = tr_sorted[col], seg[col].shift(-k)
+        ok = a.notna() & b.notna()
+        ac[name].append(np.corrcoef(a[ok], b[ok])[0, 1])
+fig, ax = plt.subplots(figsize=(W, 1.85))
+hours = [6 * k for k in lags]
+for (name, vals), c in zip(ac.items(), ["#2F6DB3", "#C9453B"]):
+    ax.plot(hours, vals, "o-", color=c, ms=2.5, label=name)
+ax.axvline(24, color="#999", ls=":", lw=0.8)
+ax.set(xlabel="Time between the two 6-hour motions (hours)", ylabel="Correlation", ylim=(0, 1), xticks=hours[1::2])
+ax.legend(frameon=False, loc="upper right")
+save(fig, "r8_motion_autocorrelation.png")
+
+# --- R9. Steering wind vs storm motion by latitude (second-dataset EDA) -----------------------
+from stormtrack.steering import STEERING_COLS, KM_PER_24H                         # noqa: E402
+sb = S.merge(steer[["SEG_ID", "ISO_TIME", "split_b"] + [c for c in STEERING_COLS if c not in ("steer_dx", "steer_dy")]],
+             on=["SEG_ID", "ISO_TIME"])
+sb = sb[sb["split_b"] == "train"].copy()
+sb["band9"] = (sb["LAT"].abs() // 5 * 5).astype(int)
+pole = np.sign(sb["LAT"])
+sb["mot_e"], sb["mot_p"] = sb["dx_target"] / KM_PER_24H, pole * sb["dy_target"] / KM_PER_24H
+sb["st_p"] = pole * sb["dlm_v"]
+prof = sb.groupby("band9").agg(n=("LAT", "size"), st_e=("dlm_u", "mean"), mot_e=("mot_e", "mean"),
+                               st_p=("st_p", "mean"), mot_p=("mot_p", "mean"))
+prof = prof[prof["n"] >= 300]
+lab9 = [f"{b}–{b + 5}" for b in prof.index]
+fig, ax = plt.subplots(figsize=(W, 2.1))
+ax.plot(lab9, prof["st_e"], "o-", color=COL["steer"], ms=2.5, label="Steering wind, eastward")
+ax.plot(lab9, prof["mot_e"], "s--", color="k", ms=2.5, label="Storm motion, eastward")
+ax.plot(lab9, prof["st_p"], "o-", color=COL["steer"], alpha=0.45, ms=2.5, label="Steering wind, poleward")
+ax.plot(lab9, prof["mot_p"], "s--", color="#777", ms=2.5, label="Storm motion, poleward")
+ax.axhline(0, color="#999", lw=0.6)
+ax.set(xlabel="Distance from the equator (° latitude)", ylabel="Speed (m/s)")
+ax.legend(frameon=False, loc="upper left", ncol=1)
+save(fig, "r9_wind_vs_motion_by_latitude.png")
